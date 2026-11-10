@@ -55,7 +55,7 @@ function queueRender() {
 
 // ───── 派生データ ─────
 function vacationToday(m) { return S.schedules.some(s => s.memberId === m.id && s.date === today); }
-function displayStatus(m) { return vacationToday(m) && m.status === "absent" ? "leave" : m.status; }
+function displayStatus(m) { return vacationToday(m) && NOT_IN_ROOM.includes(m.status) ? "leave" : m.status; }
 function coreNow() { return coreInfo(new Date(), S.settings, S.noCore); }
 function coreToday() {
   const now = new Date();
@@ -92,7 +92,7 @@ function render() {
 }
 
 function isWarn(m, core) {
-  return core.phase === "during" && !vacationToday(m) && m.status === "absent" && m.grade !== "先生";
+  return core.phase === "during" && !vacationToday(m) && NOT_IN_ROOM.includes(m.status) && m.grade !== "先生";
 }
 
 function renderSeats(core) {
@@ -169,7 +169,8 @@ function coreTag(m, c, phase) {
   if (phase === "during") {
     if (m.status === "present") return el("span", { class: "tag ok" }, c.late ? `在室(${c.arrival}来室)` : "在室");
     if (m.status === "away") return el("span", { class: "tag info" }, "離席中");
-    return el("span", { class: "tag warn" }, c.inMin > 0 ? `不在(${c.leftAt ?? ""}退室)` : "未出席");
+    if (c.inMin === 0) return el("span", { class: "tag warn" }, "未出席");
+    return el("span", { class: "tag warn" }, `${STATUS_LABEL[m.status]}(${c.leftAt ?? ""}退室)`);
   }
   const t = { "◯": ["ok", "達成"], "△": ["warn", "一部在室"], "✕": ["warn", "不在"] }[c.mark] ?? ["none", c.mark];
   return el("span", { class: "tag " + t[0] }, t[1]);

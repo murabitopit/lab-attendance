@@ -16,7 +16,7 @@
     </div>
     <nav class="links">
       <a href="index.html" class="current">座席表</a>
-      <a href="stats.html">コアタイム集計</a>
+      <a href="stats.html" title="管理者のみ">🔒 コアタイム集計</a>
       <a href="settings.html">⚙️ 設定</a>
     </nav>
   </header>
@@ -34,7 +34,8 @@
         <div class="status-buttons">
           <button class="b-present" data-status="present">出席</button>
           <button class="b-away" data-status="away">離席</button>
-          <button class="b-absent" data-status="absent">帰宅/不在</button>
+          <button class="b-home" data-status="home">帰宅</button>
+          <button class="b-absent" data-status="absent">不在</button>
           <button class="b-leave" data-status="leave">休暇</button>
         </div>
         <div class="mine-info" id="mine-info"></div>
@@ -72,9 +73,10 @@
         <div class="legend">
           <span><i style="background:var(--present)"></i>出席</span>
           <span><i style="background:var(--away)"></i>離席</span>
-          <span><i style="background:var(--absent)"></i>帰宅/不在</span>
+          <span><i style="background:var(--home)"></i>帰宅</span>
+          <span><i style="background:var(--absent)"></i>不在</span>
           <span><i style="background:var(--leave)"></i>休暇</span>
-          <span><i style="background:var(--warn); border-radius:50%"></i>コアタイム中に不在</span>
+          <span><i style="background:var(--warn); border-radius:50%"></i>コアタイム中に未在室</span>
         </div>
         <div class="seatless" id="seatless"></div>
       </section>

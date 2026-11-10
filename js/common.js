@@ -1,6 +1,8 @@
 // 画面共通のユーティリティ
-const STATUS_LABEL = { present: "出席", away: "離席", absent: "帰宅/不在", leave: "休暇" };
-const STATUS_ICON = { present: "🟢", away: "🟡", absent: "🔴", leave: "⚫" };
+// absent(不在)は初期値で、毎朝4:00にも全員この状態へ戻る
+const STATUS_LABEL = { present: "出席", away: "離席", home: "帰宅", absent: "不在", leave: "休暇" };
+const STATUS_ICON = { present: "🟢", away: "🟡", home: "🔴", absent: "⚪", leave: "⚫" };
+const NOT_IN_ROOM = ["home", "absent"];
 const SEAT_IDS = [..."ABCD"].flatMap(r => [1, 2, 3, 4].map(c => r + c)).concat(["T1", "T2"]);
 const GRADES = ["B4", "M1", "M2", "D", "先生", "その他"];
 const $ = id => document.getElementById(id);
@@ -77,3 +79,37 @@ async function boot(main) {
   }
   main();
 }
+
+/**
+ * 管理者ロック(コアタイム集計・コアタイム設定)。
+ * サーバーが無いためブラウザ側での簡易ロック。パスワードそのものではなく SHA-256 ハッシュだけを置いている。
+ * 一度解除するとタブを閉じるまで有効(sessionStorage)。
+ */
+const Admin = (() => {
+  const HASH = "84689d1299af4da7678a848ccd0d58e6b8fcfb6398312badd709d6fff6d6c4aa";
+  const KEY = "labAdminUnlocked";
+  async function sha256(text) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+  function unlocked() { try { return sessionStorage.getItem(KEY) === HASH; } catch (_) { return false; } }
+  /** container の中にパスワード入力欄を出し、正しければ onUnlock を呼ぶ(解除済みなら即呼ぶ) */
+  function gate(container, onUnlock, autofocus = false) {
+    if (unlocked()) { onUnlock(); return; }
+    const input = el("input", { type: "password", inputmode: "numeric", autocomplete: "current-password",
+                                placeholder: "管理者パスワード", style: "width:12em" });
+    const submit = async () => {
+      if (await sha256(input.value.trim()) !== HASH) { toast("パスワードが違います"); input.select(); return; }
+      try { sessionStorage.setItem(KEY, HASH); } catch (_) { /* 保存できなくてもこのページでは解除 */ }
+      box.remove();
+      onUnlock();
+    };
+    input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) submit(); });
+    const box = el("div", { class: "lock-box" },
+      el("div", { style: "font-weight:700" }, "🔒 管理者のみ"),
+      el("div", { class: "row" }, input, el("button", { class: "primary", onclick: submit }, "解除")));
+    container.append(box);
+    if (autofocus) input.focus();
+  }
+  return { gate, unlocked };
+})();

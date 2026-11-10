@@ -12,11 +12,14 @@
     <h1>📊 コアタイム集計</h1>
     <nav class="links">
       <a href="index.html">座席表</a>
-      <a href="stats.html" class="current">コアタイム集計</a>
+      <a href="stats.html" title="管理者のみ" class="current">🔒 コアタイム集計</a>
       <a href="settings.html">⚙️ 設定</a>
     </nav>
   </header>
 
+  <section class="card" id="lock-area"></section>
+
+  <div id="stats-body" hidden>
   <section class="card">
     <div class="row">
       <button id="prev">◀</button>
@@ -36,6 +39,7 @@
     <div class="table-wrap"><table id="tbl"></table></div>
     <div class="empty" id="empty" hidden>この期間にコアタイムの日はありません</div>
   </section>
+  </div>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
@@ -122,7 +126,11 @@ $("next").addEventListener("click", () => shift(1));
 $("today").addEventListener("click", () => { base = ymdOf(new Date()); load(); });
 $("mode").addEventListener("change", load);
 $("csv").addEventListener("click", downloadCsv);
-boot(() => load().catch(e => { console.error(e); toast("集計の読み込みに失敗しました"); }));
+boot(() => Admin.gate($("lock-area"), () => {
+  $("lock-area").hidden = true;
+  $("stats-body").hidden = false;
+  load().catch(e => { console.error(e); toast("集計の読み込みに失敗しました"); });
+}, true));
 </script>
 </body>
 </html>

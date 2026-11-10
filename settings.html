@@ -12,7 +12,7 @@
     <h1>⚙️ 設定</h1>
     <nav class="links">
       <a href="index.html">座席表</a>
-      <a href="stats.html">コアタイム集計</a>
+      <a href="stats.html" title="管理者のみ">🔒 コアタイム集計</a>
       <a href="settings.html" class="current">⚙️ 設定</a>
     </nav>
   </header>
@@ -47,7 +47,9 @@
   </section>
 
   <section class="card">
-    <h2>⏱ コアタイム設定</h2>
+    <h2>⏱ コアタイム設定 <span class="live">🔒 管理者のみ</span></h2>
+    <div id="core-lock"></div>
+    <div id="core-admin" hidden>
     <div class="row" id="c-weekdays"></div>
     <div class="row" style="margin-top:8px">
       <label>時間</label><input type="time" id="c-start"> 〜 <input type="time" id="c-end">
@@ -63,6 +65,7 @@
       <button class="primary" id="n-add">追加</button>
     </div>
     <ul class="list" id="nocore-list"></ul>
+    </div>
   </section>
 </div>
 
@@ -173,6 +176,7 @@ boot(() => {
   Store.onSchedulesFrom(ymdOf(new Date()), v => { schedules = v; renderSchedules(v); });
   Store.onSettings(renderSettings);
   Store.onNoCore(renderNoCore);
+  Admin.gate($("core-lock"), () => { $("core-admin").hidden = false; });
 });
 </script>
 </body>
