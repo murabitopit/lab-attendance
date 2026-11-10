@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>コアタイム集計 | 研究室 出席管理</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>📊 コアタイム集計</h1>
+    <nav class="links">
+      <a href="index.html">座席表</a>
+      <a href="stats.html" class="current">コアタイム集計</a>
+      <a href="settings.html">⚙️ 設定</a>
+    </nav>
+  </header>
+
+  <section class="card">
+    <div class="row">
+      <button id="prev">◀</button>
+      <select id="mode"><option value="week">週</option><option value="month">月</option></select>
+      <strong id="range-label"></strong>
+      <button id="next">▶</button>
+      <button id="today">今週/今月</button>
+      <button id="csv" class="small">CSVダウンロード</button>
+    </div>
+    <p class="live" style="margin-bottom:0">
+      ◯ 達成 / △ 一部在室 / ✕ 不在 / 休 休暇 / … 進行中。在室 = 出席 + 離席。
+      <span id="tol-note"></span>
+    </p>
+  </section>
+
+  <section class="card">
+    <div class="table-wrap"><table id="tbl"></table></div>
+    <div class="empty" id="empty" hidden>この期間にコアタイムの日はありません</div>
+  </section>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/core.js"></script>
+<script src="js/store.js"></script>
+<script src="js/common.js"></script>
+<script>
+let base = ymdOf(new Date());
+let last = null;   // CSV 用に直近の集計結果を保持
+
+function range() {
+  if ($("mode").value === "week") {
+    const from = addDays(base, -weekdayOf(base));
+    return [from, addDays(from, 6)];
+  }
+  const y = Number(base.slice(0, 4)), m = Number(base.slice(5, 7));
+  const from = `${base.slice(0, 7)}-01`;
+  return [from, new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)];
+}
+
+function shift(dir) {
+  if ($("mode").value === "week") base = addDays(base, 7 * dir);
+  else {
+    const d = new Date(`${base.slice(0, 7)}-01T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + dir);
+    base = d.toISOString().slice(0, 10);
+  }
+  load();
+}
+
+const MK_CLASS = { "◯": "mk-ok", "△": "mk-partial", "✕": "mk-ng", "休": "mk-vac" };
+
+async function load() {
+  const [d0, d1] = range();
+  $("range-label").textContent = `${labelOf(d0)} 〜 ${labelOf(d1)}`;
+  const [members, cfg, noCore, schedules, events] = await Promise.all([
+    Store.getMembers(), Store.getSettings(), Store.getNoCore(), Store.getSchedules(d0, d1),
+    Store.getEvents(dayStart(d0), dayStart(addDays(d1, 1))),
+  ]);
+  const students = members.filter(m => m.grade !== "先生");
+  const { days, report } = rangeReport(students, events, schedules, cfg, noCore, d0, d1, new Date());
+  last = { d0, d1, students, report };
+  $("tol-note").textContent = `遅刻・早退の許容は${cfg.toleranceMin}分。`;
+  $("empty").hidden = days.length > 0;
+  if (!days.length) { $("tbl").replaceChildren(); return; }
+  const isMonth = $("mode").value === "month";
+  const head = el("tr", {}, el("th", {}, "メンバー"),
+    ...(isMonth ? [] : days.map(d => el("th", {}, labelOf(d)))),
+    ...["在室率", "◯", "△", "✕", "休", "遅刻", "早退"].map(t => el("th", {}, t)));
+  const rows = students.map(m => {
+    const s = summarize(report[m.id]);
+    const dayCells = isMonth ? [] : report[m.id].map(d => {
+      const detail = d.mark === "休" || d.mark === "" ? "" :
+        d.inMin === 0 ? "来室なし" : `${d.arrival ?? ""}〜${d.leftAt ?? ""} ${d.inMin}分`;
+      return el("td", { title: `出席${d.presentMin}分 / 離席${d.awayMin}分` },
+        el("span", { class: "mk " + (MK_CLASS[d.mark] || "") }, d.mark || "-"),
+        el("span", { class: "dt" }, detail + (d.late ? " 遅" : "") + (d.early ? " 早" : "")));
+    });
+    return el("tr", {}, el("td", {}, `${m.grade} ${m.name}`), ...dayCells,
+      el("td", {}, s.rate === null ? "-" : `${s.rate}%`),
+      ...[s.ok, s.partial, s.ng, s.vacation, s.late, s.early].map(v => el("td", {}, v)));
+  });
+  $("tbl").replaceChildren(el("thead", {}, head), el("tbody", {}, ...rows));
+}
+
+function downloadCsv() {
+  if (!last) return;
+  const q = v => `"${String(v).replace(/"/g, '""')}"`;
+  const lines = [["学年", "名前", "日付", "判定", "在室(分)", "うち離席(分)", "コアタイム(分)", "来室", "遅刻", "退室", "早退", "休暇登録"]];
+  for (const m of last.students) for (const r of last.report[m.id]) {
+    lines.push([m.grade, m.name, r.date, r.mark, r.inMin, r.awayMin, r.fullMin, r.arrival ?? "", r.late ? "遅刻" : "",
+                r.leftAt ?? "", r.early ? "早退" : "", r.vacation ? "休暇" : ""]);
+  }
+  const blob = new Blob(["﻿" + lines.map(l => l.map(q).join(",")).join("\r\n")], { type: "text/csv" });
+  const a = el("a", { href: URL.createObjectURL(blob), download: `core_${last.d0}_${last.d1}.csv` });
+  document.body.append(a); a.click(); a.remove();
+}
+
+$("prev").addEventListener("click", () => shift(-1));
+$("next").addEventListener("click", () => shift(1));
+$("today").addEventListener("click", () => { base = ymdOf(new Date()); load(); });
+$("mode").addEventListener("change", load);
+$("csv").addEventListener("click", downloadCsv);
+boot(() => load().catch(e => { console.error(e); toast("集計の読み込みに失敗しました"); }));
+</script>
+</body>
+</html>

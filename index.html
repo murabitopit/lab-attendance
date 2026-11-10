@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#2563eb">
+  <title>研究室 出席管理</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>研究室 出席管理</h1>
+      <div class="live" id="live"><span class="dot"></span><span id="live-text">接続中…</span></div>
+    </div>
+    <nav class="links">
+      <a href="index.html" class="current">座席表</a>
+      <a href="stats.html">コアタイム集計</a>
+      <a href="settings.html">⚙️ 設定</a>
+    </nav>
+  </header>
+
+  <div class="banner none" id="banner">
+    <div><div class="big" id="banner-title">読み込み中…</div><div class="sub" id="banner-sub"></div></div>
+    <div class="clock" id="banner-clock"></div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <section class="card o1">
+        <h2>🏠 自分のステータス</h2>
+        <select id="me" style="width:100%"><option value="">読込中…</option></select>
+        <div class="status-buttons">
+          <button class="b-present" data-status="present">出席</button>
+          <button class="b-away" data-status="away">離席</button>
+          <button class="b-absent" data-status="absent">帰宅/不在</button>
+          <button class="b-leave" data-status="leave">休暇</button>
+        </div>
+        <div class="mine-info" id="mine-info"></div>
+      </section>
+
+      <section class="card o3">
+        <h2>💬 ひとこと掲示板 <span class="live">(時間が来ると自動で消えます)</span></h2>
+        <div class="row">
+          <input type="text" id="msg-text" maxlength="80" placeholder="例:15時に戻ります" style="flex:1; min-width:0">
+          <button class="primary" id="msg-post">掲示</button>
+        </div>
+        <div class="dur-buttons" id="dur-buttons">
+          <button data-min="30">30分</button>
+          <button data-min="60" class="on">1時間</button>
+          <button data-min="180">3時間</button>
+          <button data-min="today">今日中</button>
+          <span class="row" style="gap:4px">
+            <input type="number" id="dur-h" min="0" max="72" value="1" style="width:4em">時間
+            <input type="number" id="dur-m" min="0" max="59" value="0" style="width:4em">分
+          </span>
+        </div>
+        <ul class="board" id="board"></ul>
+      </section>
+
+      <section class="card o4" id="core-card" hidden>
+        <h2>⏱ 今日のコアタイム状況</h2>
+        <ul class="core-list" id="core-list"></ul>
+      </section>
+    </div>
+
+    <div>
+      <section class="card o2">
+        <h2>🪑 座席表</h2>
+        <div class="room" id="room"></div>
+        <div class="legend">
+          <span><i style="background:var(--present)"></i>出席</span>
+          <span><i style="background:var(--away)"></i>離席</span>
+          <span><i style="background:var(--absent)"></i>帰宅/不在</span>
+          <span><i style="background:var(--leave)"></i>休暇</span>
+          <span><i style="background:var(--warn); border-radius:50%"></i>コアタイム中に不在</span>
+        </div>
+        <div class="seatless" id="seatless"></div>
+      </section>
+
+      <section class="card o5">
+        <h2>📅 休暇カレンダー</h2>
+        <div id="calendar"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/core.js"></script>
+<script src="js/store.js"></script>
+<script src="js/common.js"></script>
+<script src="js/index.js"></script>
+</body>
+</html>

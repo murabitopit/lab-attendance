@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>設定 | 研究室 出席管理</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap" style="max-width:820px">
+  <header class="top">
+    <h1>⚙️ 設定</h1>
+    <nav class="links">
+      <a href="index.html">座席表</a>
+      <a href="stats.html">コアタイム集計</a>
+      <a href="settings.html" class="current">⚙️ 設定</a>
+    </nav>
+  </header>
+
+  <section class="card">
+    <h2>👤 メンバーの登録・変更</h2>
+    <div class="row">
+      <select id="m-id"><option value="">＋ 新規登録</option></select>
+      <select id="m-grade"></select>
+      <input type="text" id="m-name" placeholder="名前(例:豊橋)" style="width:9em">
+      <select id="m-seat"></select>
+      <button class="primary" id="m-save">保存</button>
+    </div>
+    <p class="live">既存メンバーを選ぶと学年・名前・座席を変更できます。使用中の座席を選ぶと、元の人は「席なし」になります。</p>
+    <div id="seed-box" hidden style="background:var(--info-bg); padding:10px; border-radius:8px">
+      メンバーがまだいません。旧アプリ(2026/11/10 時点)の15名をまとめて登録できます。
+      <button class="primary small" id="seed">一括登録</button>
+    </div>
+    <ul class="list" id="member-list"></ul>
+  </section>
+
+  <section class="card">
+    <h2>📅 休暇予定</h2>
+    <div class="row">
+      <select id="s-member"></select>
+      <input type="date" id="s-from"> 〜 <input type="date" id="s-to">
+      <input type="text" id="s-note" placeholder="メモ(任意)" maxlength="40" style="width:9em">
+      <button class="primary" id="s-add">登録</button>
+    </div>
+    <p class="live">終了日は空欄なら1日だけ登録します。休暇の日はコアタイム集計で「休」になります。</p>
+    <ul class="list" id="schedule-list"></ul>
+  </section>
+
+  <section class="card">
+    <h2>⏱ コアタイム設定</h2>
+    <div class="row" id="c-weekdays"></div>
+    <div class="row" style="margin-top:8px">
+      <label>時間</label><input type="time" id="c-start"> 〜 <input type="time" id="c-end">
+      <label>許容</label><input type="number" id="c-tol" min="0" max="120" style="width:5em">分
+      <button class="primary" id="c-save">保存</button>
+    </div>
+    <p class="live">許容:来室がこの分数を超えて遅れると「遅刻」、終了のこの分数より前に帰ると「早退」。在室が(コアタイム − 許容)以上で「◯ 達成」。</p>
+
+    <h2 style="margin-top:16px">🚫 コアタイムなしの日(祝日・休講日など)</h2>
+    <div class="row">
+      <input type="date" id="n-date">
+      <input type="text" id="n-note" placeholder="例:祝日、学会" maxlength="40" style="width:10em">
+      <button class="primary" id="n-add">追加</button>
+    </div>
+    <ul class="list" id="nocore-list"></ul>
+  </section>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/core.js"></script>
+<script src="js/store.js"></script>
+<script src="js/common.js"></script>
+<script>
+const INITIAL_MEMBERS = [];  // メンバー名は公開しないため削除
+let members = [];
+
+$("m-grade").replaceChildren(...GRADES.map(g => el("option", {}, g)));
+$("m-seat").replaceChildren(el("option", { value: "" }, "席なし"), ...SEAT_IDS.map(s => el("option", { value: s }, "席" + s)));
+
+function renderMembers() {
+  fillMemberSelect($("s-member"), members);
+  const cur = $("m-id").value;
+  $("m-id").replaceChildren(el("option", { value: "" }, "＋ 新規登録"),
+    ...members.map(m => el("option", { value: m.id }, memberLabel(m))));
+  $("m-id").value = members.some(m => m.id === cur) ? cur : "";
+  $("seed-box").hidden = members.length > 0;
+  $("member-list").replaceChildren(...members.map(m => el("li", {},
+    el("span", {}, el("strong", {}, m.seatId ? `席${m.seatId}` : "席なし"), ` : ${m.grade} ${m.name}`),
+    el("button", { class: "danger small", onclick: () => deleteMember(m) }, "削除"))));
+}
+
+$("m-id").addEventListener("change", () => {
+  const m = members.find(x => x.id === $("m-id").value);
+  $("m-name").value = m ? m.name : "";
+  $("m-grade").value = m ? m.grade : GRADES[0];
+  $("m-seat").value = m ? (m.seatId || "") : "";
+});
+
+$("m-save").addEventListener("click", async () => {
+  const body = { id: $("m-id").value || null, name: $("m-name").value.trim(), grade: $("m-grade").value, seatId: $("m-seat").value || null };
+  if (!body.name) { toast("名前を入力してください"); return; }
+  const notice = await attempt(() => Store.saveMember(body, members)).catch(() => undefined);
+  if (notice === undefined) return;
+  toast(notice || "保存しました");
+  if (!body.id) $("m-name").value = "";
+});
+
+$("seed").addEventListener("click", async () => {
+  if (members.length) return;
+  await attempt(() => Store.seedMembers(INITIAL_MEMBERS), "15名を登録しました").catch(() => {});
+});
+
+async function deleteMember(m) {
+  if (!confirm(`${m.grade} ${m.name} さんを削除しますか?\n(過去の出席記録は残ります)`)) return;
+  await attempt(() => Store.deleteMember(m.id), "削除しました").catch(() => {});
+}
+
+function renderSchedules(list) {
+  const nameOf = id => members.find(m => m.id === id)?.name;
+  list = list.filter(s => nameOf(s.memberId)).sort((a, b) => a.date.localeCompare(b.date));
+  $("schedule-list").replaceChildren(...(list.length ? list.map(s => el("li", {},
+    el("span", {}, el("strong", {}, s.date), ` : ${nameOf(s.memberId)}`, s.note ? `(${s.note})` : ""),
+    el("button", { class: "danger small", onclick: () => deleteSchedule(s.id) }, "削除")))
+    : [el("li", { class: "empty" }, "今後の休暇予定はありません")]));
+}
+
+$("s-add").addEventListener("click", async () => {
+  const mid = $("s-member").value;
+  if (!mid || !$("s-from").value) { toast("名前と日付を選んでください"); return; }
+  await attempt(() => Store.addSchedules(mid, $("s-from").value, $("s-to").value || $("s-from").value, $("s-note").value.trim()), "登録しました")
+    .then(() => { $("s-from").value = $("s-to").value = $("s-note").value = ""; }).catch(() => {});
+});
+
+async function deleteSchedule(id) {
+  if (!confirm("この休暇予定を削除しますか?")) return;
+  await attempt(() => Store.deleteSchedule(id)).catch(() => {});
+}
+
+function renderSettings(c) {
+  $("c-weekdays").replaceChildren(el("label", {}, "曜日"), ...[...WEEKDAY_JA].map((w, i) =>
+    el("label", { style: "color:inherit" }, el("input", { type: "checkbox", value: i, checked: c.coreWeekdays.includes(i) }), w)));
+  $("c-start").value = c.coreStart; $("c-end").value = c.coreEnd; $("c-tol").value = c.toleranceMin;
+}
+
+function renderNoCore(nc) {
+  const list = Object.entries(nc).sort();
+  $("nocore-list").replaceChildren(...(list.length ? list.map(([d, note]) => el("li", {},
+    el("span", {}, el("strong", {}, d), note ? ` : ${note}` : ""),
+    el("button", { class: "danger small", onclick: () => attempt(() => Store.deleteNoCore(d)).catch(() => {}) }, "削除")))
+    : [el("li", { class: "empty" }, "登録はありません")]));
+}
+
+$("c-save").addEventListener("click", async () => {
+  const coreWeekdays = [...document.querySelectorAll("#c-weekdays input:checked")].map(x => Number(x.value));
+  const coreStart = $("c-start").value, coreEnd = $("c-end").value;
+  const toleranceMin = Math.max(0, Math.min(120, Number($("c-tol").value) || 0));
+  if (!coreStart || !coreEnd || coreEnd <= coreStart) { toast("終了時刻は開始時刻より後にしてください"); return; }
+  await attempt(() => Store.saveSettings({ coreWeekdays, coreStart, coreEnd, toleranceMin }), "コアタイム設定を保存しました").catch(() => {});
+});
+
+$("n-add").addEventListener("click", async () => {
+  if (!$("n-date").value) { toast("日付を選んでください"); return; }
+  await attempt(() => Store.addNoCore($("n-date").value, $("n-note").value.trim()))
+    .then(() => { $("n-date").value = $("n-note").value = ""; }).catch(() => {});
+});
+
+let schedules = [];
+boot(() => {
+  Store.onMembers(v => { members = v; renderMembers(); renderSchedules(schedules); });
+  Store.onSchedulesFrom(ymdOf(new Date()), v => { schedules = v; renderSchedules(v); });
+  Store.onSettings(renderSettings);
+  Store.onNoCore(renderNoCore);
+});
+</script>
+</body>
+</html>
