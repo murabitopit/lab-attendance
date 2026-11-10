@@ -22,7 +22,7 @@
 | ファイル | 役割 |
 |---|---|
 | `index.html` + `js/index.js` | 座席表・ステータス変更・掲示板・今日のコアタイム状況・休暇カレンダー |
-| `stats.html` | コアタイム集計(週/月、CSV) |
+| `stats.html` | 「log🔒」= コアタイム集計(週/月、CSV)。設定ページの一番下から入る |
 | `settings.html` | メンバー・休暇・コアタイム設定・コアなし日 |
 | `js/core.js` | 日本時間の扱いとコアタイム判定(Firebase 非依存) |
 | `js/store.js` | Firestore の読み書き・リアルタイム購読 |

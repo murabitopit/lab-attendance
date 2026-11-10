@@ -173,3 +173,6 @@ body.no-scroll { overflow: hidden; }
   .sheet-backdrop { align-items: flex-end; padding: 0; }
   .sheet { max-width: none; border-radius: var(--radius) var(--radius) 0 0; max-height: 85vh; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
 }
+
+/* 設定ページ下部の log🔒 ボタン */
+.log-link { display: inline-block; padding: 10px 18px; border-radius: 8px; background: var(--none-bg); color: var(--text); text-decoration: none; font-weight: 700; border: 1px solid var(--line); }
