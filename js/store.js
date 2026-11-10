@@ -33,7 +33,8 @@ const Store = (() => {
 
   const toDate = v => (v && v.toDate ? v.toDate() : v instanceof Date ? v : null);
   const docs = snap => snap.docs.map(d => ({ id: d.id, ...d.data(SNAP) }));
-  const member = d => ({ ...d, statusSince: toDate(d.statusSince) });
+  // 一時期あった「帰宅(home)」は「帰宅/不在(absent)」として扱う
+  const member = d => ({ ...d, status: d.status === "home" ? "absent" : d.status, statusSince: toDate(d.statusSince) });
 
   // ───── 購読(リアルタイム) ─────
   function onSettings(cb) {

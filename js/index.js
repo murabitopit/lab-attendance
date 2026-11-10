@@ -55,7 +55,7 @@ function queueRender() {
 
 // ───── 派生データ ─────
 function vacationToday(m) { return S.schedules.some(s => s.memberId === m.id && s.date === today); }
-function displayStatus(m) { return vacationToday(m) && NOT_IN_ROOM.includes(m.status) ? "leave" : m.status; }
+function displayStatus(m) { return vacationToday(m) && m.status === "absent" ? "leave" : m.status; }
 function coreNow() { return coreInfo(new Date(), S.settings, S.noCore); }
 function coreToday() {
   const now = new Date();
@@ -71,6 +71,10 @@ function buildRoom() {
     el("div", { class: "desk" }, SEAT_IDS.slice(0, 8).map(seat)),
     el("div", { class: "desk" }, SEAT_IDS.slice(8, 16).map(seat)),
     el("div", { class: "desk teacher" }, SEAT_IDS.slice(16).map(seat)));
+  $("room").addEventListener("click", e => {
+    const id = e.target.closest(".seat")?.dataset.member;
+    if (id) openDetail(id);
+  });
 }
 
 function render() {
@@ -87,23 +91,28 @@ function render() {
   renderMine(ct);
   renderBoard();
   renderCore(core, ct);
+  renderDetail(ct);
   tick();
   cleanupExpired();
 }
 
 function isWarn(m, core) {
-  return core.phase === "during" && !vacationToday(m) && NOT_IN_ROOM.includes(m.status) && m.grade !== "先生";
+  return core.phase === "during" && !vacationToday(m) && m.status === "absent" && m.grade !== "先生";
 }
 
 function renderSeats(core) {
   const me = $("me").value;
-  const latest = {};
-  for (const msg of activeMessages()) if (!(msg.memberId in latest)) latest[msg.memberId] = msg.text;
+  const latest = {}, count = {};
+  for (const msg of activeMessages()) {
+    if (!(msg.memberId in latest)) latest[msg.memberId] = msg.text;
+    count[msg.memberId] = (count[msg.memberId] || 0) + 1;
+  }
   document.querySelectorAll("#room .seat").forEach(s => {
     s.className = "seat";
     s.querySelector(".nm").textContent = "";
     s.querySelector(".cm")?.remove();
     s.removeAttribute("title");
+    delete s.dataset.member;
   });
   const seatless = [];
   for (const m of S.members) {
@@ -114,12 +123,14 @@ function renderSeats(core) {
     if (isWarn(m, core)) seat.classList.add("warn");
     if (m.id === me) seat.classList.add("me");
     seat.querySelector(".nm").textContent = m.name;
-    seat.title = `${m.grade} ${m.name}:${STATUS_LABEL[st]}`;
-    if (latest[m.id]) seat.append(el("span", { class: "cm" }, "💬 " + latest[m.id]));
+    seat.title = `${m.grade} ${m.name}:${STATUS_LABEL[st]}(タップで詳細)`;
+    seat.dataset.member = m.id;
+    if (latest[m.id]) seat.append(el("span", { class: "cm" }, (count[m.id] > 1 ? `💬${count[m.id]} ` : "💬 ") + latest[m.id]));
   }
   $("seatless").replaceChildren(...(seatless.length ? [
     el("span", { class: "live" }, "席なし: "),
-    ...seatless.map(m => el("span", { class: "chip st-" + displayStatus(m), title: STATUS_LABEL[displayStatus(m)] }, m.name)),
+    ...seatless.map(m => el("button", { class: "chip st-" + displayStatus(m), title: STATUS_LABEL[displayStatus(m)],
+                                         onclick: () => openDetail(m.id) }, m.name)),
   ] : []));
 }
 
@@ -151,6 +162,49 @@ function renderBoard() {
       el("button", { class: "small", title: "消す", onclick: () => deleteMessage(msg.id) }, "✕"));
   });
   $("board").replaceChildren(...(items.length ? items : [el("li", { class: "empty" }, "いまは掲示がありません")]));
+}
+
+// ───── 座席タップ時の詳細(コメント全文) ─────
+let detailId = null;
+function openDetail(id) {
+  detailId = id;
+  $("detail").hidden = false;
+  document.body.classList.add("no-scroll");
+  queueRender();
+  $("detail-close").focus();
+}
+function closeDetail() {
+  detailId = null;
+  $("detail").hidden = true;
+  document.body.classList.remove("no-scroll");
+}
+$("detail-close").addEventListener("click", closeDetail);
+$("detail").addEventListener("click", e => { if (e.target === $("detail")) closeDetail(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && detailId) closeDetail(); });
+
+function renderDetail(ct) {
+  if (!detailId) return;
+  const m = S.members.find(x => x.id === detailId);
+  if (!m) { closeDetail(); return; }
+  const st = displayStatus(m);
+  const since = m.statusSince ? `${ymdOf(m.statusSince).slice(5).replace("-", "/")} ${hmOf(m.statusSince)}〜` : "";
+  const c = ct[m.id];
+  const now = new Date();
+  const msgs = activeMessages().filter(x => x.memberId === m.id);
+  $("detail-title").textContent = `${m.grade} ${m.name}` + (m.seatId ? `(席${m.seatId})` : "");
+  $("detail-body").replaceChildren(
+    el("div", { class: "row" },
+      el("span", { class: "chip st-" + st }, STATUS_LABEL[st]),
+      el("span", { class: "live" }, since),
+      c && c.mark !== "休" ? el("span", { class: "live" }, `今日のコア在室 ${c.inMin}/${c.fullMin}分`) : null),
+    el("h3", { class: "detail-h" }, `💬 コメント(${msgs.length}件)`),
+    msgs.length
+      ? el("ul", { class: "board" }, msgs.map(msg => el("li", {},
+          el("div", {},
+            el("div", { class: "txt detail-txt" }, msg.text),
+            el("div", { class: "meta" }, `${hmOf(msg.createdAt)} 投稿 · ${fmtRemain((msg.expiresAt - now) / 1000)}`)),
+          el("button", { class: "small", title: "消す", onclick: () => deleteMessage(msg.id) }, "✕"))))
+      : el("div", { class: "empty" }, "掲示中のコメントはありません"));
 }
 
 function cleanupExpired() {

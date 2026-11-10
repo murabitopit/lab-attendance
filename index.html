@@ -34,8 +34,7 @@
         <div class="status-buttons">
           <button class="b-present" data-status="present">出席</button>
           <button class="b-away" data-status="away">離席</button>
-          <button class="b-home" data-status="home">帰宅</button>
-          <button class="b-absent" data-status="absent">不在</button>
+          <button class="b-absent" data-status="absent">帰宅/不在</button>
           <button class="b-leave" data-status="leave">休暇</button>
         </div>
         <div class="mine-info" id="mine-info"></div>
@@ -73,8 +72,7 @@
         <div class="legend">
           <span><i style="background:var(--present)"></i>出席</span>
           <span><i style="background:var(--away)"></i>離席</span>
-          <span><i style="background:var(--home)"></i>帰宅</span>
-          <span><i style="background:var(--absent)"></i>不在</span>
+          <span><i style="background:var(--absent)"></i>帰宅/不在</span>
           <span><i style="background:var(--leave)"></i>休暇</span>
           <span><i style="background:var(--warn); border-radius:50%"></i>コアタイム中に未在室</span>
         </div>
@@ -86,6 +84,17 @@
         <div id="calendar"></div>
       </section>
     </div>
+  </div>
+</div>
+
+<!-- 座席タップで開く詳細(コメント全文)。背景タップ・✕・Esc で閉じる -->
+<div class="sheet-backdrop" id="detail" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+    <div class="sheet-head">
+      <h2 id="detail-title"></h2>
+      <button id="detail-close" class="small" aria-label="閉じる">✕ 閉じる</button>
+    </div>
+    <div id="detail-body"></div>
   </div>
 </div>
 

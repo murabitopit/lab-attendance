@@ -1,8 +1,7 @@
 // 画面共通のユーティリティ
-// absent(不在)は初期値で、毎朝4:00にも全員この状態へ戻る
-const STATUS_LABEL = { present: "出席", away: "離席", home: "帰宅", absent: "不在", leave: "休暇" };
-const STATUS_ICON = { present: "🟢", away: "🟡", home: "🔴", absent: "⚪", leave: "⚫" };
-const NOT_IN_ROOM = ["home", "absent"];
+// absent(帰宅/不在)は初期値で、毎朝4:00にも全員この状態へ戻る
+const STATUS_LABEL = { present: "出席", away: "離席", absent: "帰宅/不在", leave: "休暇" };
+const STATUS_ICON = { present: "🟢", away: "🟡", absent: "⚪", leave: "⚫" };
 const SEAT_IDS = [..."ABCD"].flatMap(r => [1, 2, 3, 4].map(c => r + c)).concat(["T1", "T2"]);
 const GRADES = ["B4", "M1", "M2", "D", "先生", "その他"];
 const $ = id => document.getElementById(id);
