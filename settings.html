@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
   <title>設定 | 研究室 出席管理</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -26,10 +27,6 @@
       <button class="primary" id="m-save">保存</button>
     </div>
     <p class="live">既存メンバーを選ぶと学年・名前・座席を変更できます。使用中の座席を選ぶと、元の人は「席なし」になります。</p>
-    <div id="seed-box" hidden style="background:var(--info-bg); padding:10px; border-radius:8px">
-      メンバーがまだいません。旧アプリ(2026/11/10 時点)の15名をまとめて登録できます。
-      <button class="primary small" id="seed">一括登録</button>
-    </div>
     <ul class="list" id="member-list"></ul>
   </section>
 
@@ -71,6 +68,12 @@
     <a class="log-link" href="stats.html">log🔒</a>
     <p class="live" style="margin-bottom:0">コアタイム集計(管理者のみ)</p>
   </section>
+
+  <section class="card">
+    <h2>🔑 この端末のパスワード記憶</h2>
+    <p class="live">共用PCなどで使ったあとは消しておくと、次回はパスワード入力が必要になります。</p>
+    <button class="danger small" id="forget-key">この端末の記憶を消す</button>
+  </section>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
@@ -81,7 +84,6 @@
 <script src="js/store.js"></script>
 <script src="js/common.js"></script>
 <script>
-const INITIAL_MEMBERS = [];  // メンバー名は公開しないため削除
 let members = [];
 
 $("m-grade").replaceChildren(...GRADES.map(g => el("option", {}, g)));
@@ -93,7 +95,6 @@ function renderMembers() {
   $("m-id").replaceChildren(el("option", { value: "" }, "＋ 新規登録"),
     ...members.map(m => el("option", { value: m.id }, memberLabel(m))));
   $("m-id").value = members.some(m => m.id === cur) ? cur : "";
-  $("seed-box").hidden = members.length > 0;
   $("member-list").replaceChildren(...members.map(m => el("li", {},
     el("span", {}, el("strong", {}, m.seatId ? `席${m.seatId}` : "席なし"), ` : ${m.grade} ${m.name}`),
     el("button", { class: "danger small", onclick: () => deleteMember(m) }, "削除"))));
@@ -113,11 +114,6 @@ $("m-save").addEventListener("click", async () => {
   if (notice === undefined) return;
   toast(notice || "保存しました");
   if (!body.id) $("m-name").value = "";
-});
-
-$("seed").addEventListener("click", async () => {
-  if (members.length) return;
-  await attempt(() => Store.seedMembers(INITIAL_MEMBERS), "15名を登録しました").catch(() => {});
 });
 
 async function deleteMember(m) {
@@ -172,6 +168,12 @@ $("n-add").addEventListener("click", async () => {
   if (!$("n-date").value) { toast("日付を選んでください"); return; }
   await attempt(() => Store.addNoCore($("n-date").value, $("n-note").value.trim()))
     .then(() => { $("n-date").value = $("n-note").value = ""; }).catch(() => {});
+});
+
+$("forget-key").addEventListener("click", () => {
+  if (!confirm("この端末に記憶したパスワードを消しますか?")) return;
+  AppLock.forget();
+  location.href = "index.html";
 });
 
 let schedules = [];

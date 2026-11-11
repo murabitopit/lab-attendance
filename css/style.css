@@ -176,3 +176,10 @@ body.no-scroll { overflow: hidden; }
 
 /* 設定ページ下部の log🔒 ボタン */
 .log-link { display: inline-block; padding: 10px 18px; border-radius: 8px; background: var(--none-bg); color: var(--text); text-decoration: none; font-weight: 700; border: 1px solid var(--line); }
+
+/* アプリ起動時のパスワード画面 */
+body.locked .wrap { visibility: hidden; }
+.app-lock { position: fixed; inset: 0; z-index: 1000; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.app-lock-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px 20px; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
+.app-lock-card h1 { font-size: 20px; margin: 0; }
+.app-lock-card p { margin: 0; }

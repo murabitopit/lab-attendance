@@ -1,12 +1,14 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 研究室のデータは labs/{labId} 以下にまとめて置く。
-    // ログイン画面は無く、各端末が自動で匿名サインインする(=URLを知っていれば誰でも読み書き可)。
+    // 研究室のデータは labs/{labId} 以下にだけ置き、それ以外はすべて拒否する。
+    // labId はアプリのパスワードから計算した値(js/common.js の AppLock.derive)。
+    // ※ 公開リポジトリには実際の labId を書かない。実際に適用するルールは
+    //   Git 管理外の firestore.deploy.rules にあり、そこの <LAB_ID> が本物の値になっている。
     match /labs/{lab} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && lab == "<LAB_ID>";
       match /{document=**} {
-        allow read, write: if request.auth != null;
+        allow read, write: if request.auth != null && lab == "<LAB_ID>";
       }
     }
   }

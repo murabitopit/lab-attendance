@@ -64,18 +64,86 @@ function fillMemberSelect(select, members, placeholder = "名前を選択") {
   if (members.some(m => m.id === cur)) select.value = cur;
 }
 
-/** Firebase に接続してからページ本体を始める。未設定・失敗時は案内を表示 */
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * アプリのパスワード。入力値から研究室データの保存場所(labId)を計算する。
+ * 正しいパスワードかどうかは Firestore のルールが判定する(コード内に正解は置いていない)。
+ * 一度通ればこの端末に labId を記憶し、次回から入力を省略する。
+ */
+const AppLock = {
+  KEY: "labAccessKey",
+  saved() { try { return localStorage.getItem(this.KEY) || ""; } catch (_) { return ""; } },
+  save(v) { try { localStorage.setItem(this.KEY, v); } catch (_) { /* 記憶できなくても今回は使える */ } },
+  forget() { try { localStorage.removeItem(this.KEY); } catch (_) { /* noop */ } },
+  derive: pw => sha256Hex("lab-attendance:v1:" + pw),
+};
+
+function showFatal(msg) {
+  document.body.classList.remove("locked");
+  document.querySelector(".wrap").prepend(el("div", { class: "card", style: "background:var(--warn-bg)" }, msg));
+}
+
+/** パスワード入力画面を出し、正しく開けたら resolve */
+function askAppPassword() {
+  return new Promise(resolve => {
+    const input = el("input", { type: "password", inputmode: "numeric", autocomplete: "current-password",
+                                placeholder: "パスワード", style: "width:100%" });
+    const err = el("div", { class: "live", style: "min-height:1.5em; color:var(--danger)" });
+    const btn = el("button", { class: "primary", style: "width:100%" }, "開く");
+    const submit = async () => {
+      const pw = input.value.trim();
+      if (!pw) return;
+      btn.disabled = true; err.textContent = "確認中…";
+      try {
+        const key = await AppLock.derive(pw);
+        await Store.openLab(key);
+        AppLock.save(key);
+        box.remove();
+        resolve();
+      } catch (e) {
+        err.textContent = e.message === "WRONG_KEY" ? "パスワードが違います" : "接続できませんでした。通信状況を確認してください";
+        input.select();
+      } finally { btn.disabled = false; }
+    };
+    btn.addEventListener("click", submit);
+    input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) submit(); });
+    const box = el("div", { class: "app-lock" },
+      el("div", { class: "app-lock-card" },
+        el("h1", {}, "研究室 出席管理"),
+        el("p", { class: "live" }, "研究室メンバー用のページです。パスワードを入力してください(この端末では次回から省略されます)。"),
+        input, err, btn));
+    document.body.append(box);
+    input.focus();
+  });
+}
+
+/** Firebase に接続し、パスワード確認を経てからページ本体を始める */
 async function boot(main) {
+  document.body.classList.add("locked");
   try {
     await Store.init();
   } catch (e) {
     console.error(e);
-    const msg = e.message === "NOT_CONFIGURED"
+    showFatal(e.message === "NOT_CONFIGURED"
       ? "Firebase がまだ設定されていません。js/firebase-config.js に設定を書き込んでください(README.md 参照)。"
-      : "サーバーに接続できませんでした。通信状況を確認して再読み込みしてください。";
-    document.querySelector(".wrap").prepend(el("div", { class: "card", style: "background:var(--warn-bg)" }, msg));
+      : "サーバーに接続できませんでした。通信状況を確認して再読み込みしてください。");
     return;
   }
+  let opened = false;
+  const saved = AppLock.saved();
+  if (saved) {
+    try { await Store.openLab(saved); opened = true; }
+    catch (e) {
+      if (e.message !== "WRONG_KEY") { console.error(e); showFatal("サーバーに接続できませんでした。通信状況を確認して再読み込みしてください。"); return; }
+      AppLock.forget();   // パスワードが変更された等
+    }
+  }
+  if (!opened) await askAppPassword();
+  document.body.classList.remove("locked");
   main();
 }
 
@@ -87,10 +155,6 @@ async function boot(main) {
 const Admin = (() => {
   const HASH = "84689d1299af4da7678a848ccd0d58e6b8fcfb6398312badd709d6fff6d6c4aa";
   const KEY = "labAdminUnlocked";
-  async function sha256(text) {
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
-  }
   function unlocked() { try { return sessionStorage.getItem(KEY) === HASH; } catch (_) { return false; } }
   /** container の中にパスワード入力欄を出し、正しければ onUnlock を呼ぶ(解除済みなら即呼ぶ) */
   function gate(container, onUnlock, autofocus = false) {
@@ -98,7 +162,7 @@ const Admin = (() => {
     const input = el("input", { type: "password", inputmode: "numeric", autocomplete: "current-password",
                                 placeholder: "管理者パスワード", style: "width:12em" });
     const submit = async () => {
-      if (await sha256(input.value.trim()) !== HASH) { toast("パスワードが違います"); input.select(); return; }
+      if (await sha256Hex(input.value.trim()) !== HASH) { toast("パスワードが違います"); input.select(); return; }
       try { sessionStorage.setItem(KEY, HASH); } catch (_) { /* 保存できなくてもこのページでは解除 */ }
       box.remove();
       onUnlock();

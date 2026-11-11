@@ -1,6 +1,7 @@
 // Firestore とのやり取り(読み書き・リアルタイム購読)をまとめたもの。
 //
-// データ構成(すべて labs/{LAB_ID} 以下):
+// データ構成(すべて labs/{labId} 以下。labId はアプリのパスワードから計算するので、
+// パスワードを知らないと保存場所が分からない。Firestore のルールでもこの labId 以外を拒否している):
 //   (doc)       settings: coreWeekdays / coreStart / coreEnd / toleranceMin, lastReset
 //   members/    name, grade, seatId(null=席なし), status, statusSince, active
 //   events/     memberId, status, at   … ステータス変更のログ(コアタイム集計に使う)
@@ -16,6 +17,7 @@ const Store = (() => {
     return !!(c && c.apiKey && c.apiKey !== "YOUR_API_KEY");
   }
 
+  /** Firebase に接続して匿名サインインする(どの研究室データを開くかは openLab で決める) */
   async function init() {
     const emu = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has("emu");
     if (!configured() && !emu) throw new Error("NOT_CONFIGURED");
@@ -27,8 +29,19 @@ const Store = (() => {
     }
     FV = firebase.firestore.FieldValue;
     TS = firebase.firestore.Timestamp;
-    lab = db.collection("labs").doc(window.LAB_ID || "main");
     await app.auth().signInAnonymously();
+  }
+
+  /** 研究室データを開く。パスワード違いなら Firestore のルールで拒否され "WRONG_KEY" になる */
+  async function openLab(labId) {
+    const ref = db.collection("labs").doc(labId);
+    try {
+      await ref.get();
+    } catch (e) {
+      if (e.code === "permission-denied") throw new Error("WRONG_KEY");
+      throw e;
+    }
+    lab = ref;
   }
 
   const toDate = v => (v && v.toDate ? v.toDate() : v instanceof Date ? v : null);
@@ -118,15 +131,6 @@ const Store = (() => {
   /** 過去の記録を残すため論理削除 */
   const deleteMember = id => lab.collection("members").doc(id).update({ active: false, seatId: null });
 
-  async function seedMembers(list) {
-    const b = db.batch();
-    for (const [grade, name, seatId] of list) {
-      b.set(lab.collection("members").doc(), { name, grade, seatId, status: "absent",
-                                              statusSince: FV.serverTimestamp(), active: true });
-    }
-    await b.commit();
-  }
-
   async function addSchedules(memberId, from, to, note) {
     if (to < from) [from, to] = [to, from];
     const b = db.batch();
@@ -167,9 +171,9 @@ const Store = (() => {
     });
   }
 
-  return { configured, init, onSettings, onMembers, onMessages, onNoCore, onSchedulesFrom, onEventsSince,
+  return { configured, init, openLab, onSettings, onMembers, onMessages, onNoCore, onSchedulesFrom, onEventsSince,
            getSchedules, getEvents, getMembers, getSettings, getNoCore,
-           setStatus, postMessage, deleteMessage, saveMember, deleteMember, seedMembers,
+           setStatus, postMessage, deleteMessage, saveMember, deleteMember,
            addSchedules, deleteSchedule, saveSettings, addNoCore, deleteNoCore, maybeReset };
 })();
 

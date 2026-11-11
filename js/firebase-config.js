@@ -18,6 +18,3 @@ window.FIREBASE_CONFIG = {
   messagingSenderId: "1646383553",
   appId: "1:1646383553:web:f17e2e84dab54f6a655f40"
 };
-
-// 同じ Firebase プロジェクトで複数の研究室・テスト環境を分けたい場合に変える
-window.LAB_ID = "main";
