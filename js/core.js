@@ -110,6 +110,55 @@ function rangeReport(members, events, schedules, cfg, noCore, d0, d1, now) {
   return { days, report };
 }
 
+/**
+ * コアタイムに関係なく、1日(4:00〜翌4:00)の在室時間(出席+離席)を集計する。
+ * tl は buildTimelines の1人分。upto は集計の終端(今日なら現在時刻)。
+ */
+function roomDay(tl, ymd, upto) {
+  let present = 0, away = 0, first = null, lastEnd = null, stillIn = false;
+  for (const [s, e, st] of tl || []) {
+    if (st !== "present" && st !== "away" || e <= s) continue;
+    const m = (e - s) / 60000;
+    if (st === "present") present += m; else away += m;
+    first ||= s;
+    lastEnd = e;
+    stillIn = +e === +upto;
+  }
+  return {
+    date: ymd, inMin: Math.round(present + away), presentMin: Math.round(present), awayMin: Math.round(away),
+    first: first ? hmOf(first) : null, last: lastEnd && !stillIn ? hmOf(lastEnd) : null, stillIn,
+  };
+}
+
+/** 期間 [d0, d1] の全日について、各メンバーの在室時間 */
+function roomReport(members, events, d0, d1, now) {
+  const days = [];
+  for (let d = d0; d <= d1; d = addDays(d, 1)) days.push(d);
+  const report = Object.fromEntries(members.map(m => [m.id, []]));
+  for (const d of days) {
+    const from = dayStart(d);
+    const upto = new Date(Math.min(dayStart(addDays(d, 1)), Math.max(now, from)));
+    const tls = buildTimelines(events, from, upto);
+    const isToday = upto < dayStart(addDays(d, 1));
+    for (const m of members) {
+      const r = roomDay(tls[m.id], d, upto);
+      // 過去の日で最後まで在室のまま = 帰宅を押し忘れて翌朝4時のリセットで区切られた
+      if (!isToday && r.stillIn) { r.stillIn = false; r.forgot = true; r.last = "翌4:00"; }
+      report[m.id].push(r);
+    }
+  }
+  return { days, report };
+}
+
+function summarizeRoom(results) {
+  const total = results.reduce((a, r) => a + r.inMin, 0);
+  const attended = results.filter(r => r.inMin > 0).length;
+  return { total, attended, avg: attended ? Math.round(total / attended) : null };
+}
+
+/** 分 → "h:mm" */
+function fmtHM(min) { return `${Math.floor(min / 60)}:${pad2(Math.round(min % 60))}`; }
+
 function summarize(results) {
   const done = results.filter(r => ["◯", "△", "✕"].includes(r.mark));
   const full = done.reduce((a, r) => a + r.fullMin, 0), inm = done.reduce((a, r) => a + r.inMin, 0);
@@ -139,5 +188,6 @@ function coreInfo(now, cfg, noCore) {
 
 if (typeof module !== "undefined") {
   module.exports = { ymdOf, hmOf, jstDate, addDays, weekdayOf, labelOf, latestReset, dayStart, normSettings,
-    isCoreDay, buildTimelines, dayResult, rangeReport, summarize, coreInfo, DEFAULT_SETTINGS };
+    isCoreDay, buildTimelines, dayResult, rangeReport, summarize, coreInfo, DEFAULT_SETTINGS,
+    roomDay, roomReport, summarizeRoom, fmtHM };
 }

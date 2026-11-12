@@ -20,6 +20,10 @@
   <section class="card" id="lock-area"></section>
 
   <div id="stats-body" hidden>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-core" data-tab="core" aria-selected="true">コアタイム</button>
+    <button role="tab" id="tab-room" data-tab="room" aria-selected="false">在室時間</button>
+  </div>
   <section class="card">
     <div class="row">
       <button id="prev">◀</button>
@@ -29,15 +33,18 @@
       <button id="today">今週/今月</button>
       <button id="csv" class="small">CSVダウンロード</button>
     </div>
-    <p class="live" style="margin-bottom:0">
+    <p class="live" style="margin-bottom:0" id="note-core">
       ◯ 達成 / △ 一部在室 / ✕ 不在 / 休 休暇 / … 進行中。在室 = 出席 + 離席。
       <span id="tol-note"></span>
+    </p>
+    <p class="live" style="margin-bottom:0" id="note-room" hidden>
+      コアタイムに関係なく、1日(朝4:00〜翌朝4:00)の在室時間(出席 + 離席)を集計。時間は「時間:分」、その下は最初に来た時刻〜最後に出た時刻。「〜翌4:00?」は帰宅/不在の押し忘れの可能性(翌朝4時の自動リセットまで在室扱い)。
     </p>
   </section>
 
   <section class="card">
     <div class="table-wrap"><table id="tbl"></table></div>
-    <div class="empty" id="empty" hidden>この期間にコアタイムの日はありません</div>
+    <div class="empty" id="empty" hidden></div>
   </section>
   </div>
 </div>
@@ -51,7 +58,9 @@
 <script src="js/common.js"></script>
 <script>
 let base = ymdOf(new Date());
+let tab = "core";
 let last = null;   // CSV 用に直近の集計結果を保持
+try { if (sessionStorage.getItem("logTab") === "room") tab = "room"; } catch (_) { /* noop */ }
 
 function range() {
   if ($("mode").value === "week") {
@@ -75,6 +84,15 @@ function shift(dir) {
 
 const MK_CLASS = { "◯": "mk-ok", "△": "mk-partial", "✕": "mk-ng", "休": "mk-vac" };
 
+function setTab(t) {
+  tab = t;
+  try { sessionStorage.setItem("logTab", t); } catch (_) { /* noop */ }
+  document.querySelectorAll(".tabs [role=tab]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
+  $("note-core").hidden = t !== "core";
+  $("note-room").hidden = t !== "room";
+  load();
+}
+
 async function load() {
   const [d0, d1] = range();
   $("range-label").textContent = `${labelOf(d0)} 〜 ${labelOf(d1)}`;
@@ -83,9 +101,11 @@ async function load() {
     Store.getEvents(dayStart(d0), dayStart(addDays(d1, 1))),
   ]);
   const students = members.filter(m => m.grade !== "先生");
+  if (tab === "room") return renderRoom(students, events, d0, d1);
   const { days, report } = rangeReport(students, events, schedules, cfg, noCore, d0, d1, new Date());
-  last = { d0, d1, students, report };
+  last = { tab: "core", d0, d1, students, report };
   $("tol-note").textContent = `遅刻・早退の許容は${cfg.toleranceMin}分。`;
+  $("empty").textContent = "この期間にコアタイムの日はありません";
   $("empty").hidden = days.length > 0;
   if (!days.length) { $("tbl").replaceChildren(); return; }
   const isMonth = $("mode").value === "month";
@@ -108,16 +128,52 @@ async function load() {
   $("tbl").replaceChildren(el("thead", {}, head), el("tbody", {}, ...rows));
 }
 
+// ───── 在室時間タブ ─────
+function renderRoom(students, events, d0, d1) {
+  const { days, report } = roomReport(students, events, d0, d1, new Date());
+  last = { tab: "room", d0, d1, students, report };
+  $("empty").hidden = true;
+  const isMonth = $("mode").value === "month";
+  const head = el("tr", {}, el("th", {}, "メンバー"),
+    ...(isMonth ? [] : days.map(d => el("th", {}, labelOf(d)))),
+    ...["合計", "来室日数", "1日平均"].map(t => el("th", {}, t)));
+  const rows = students.map(m => {
+    const s = summarizeRoom(report[m.id]);
+    const dayCells = isMonth ? [] : report[m.id].map(r => r.inMin === 0 && !r.stillIn
+      ? el("td", {}, el("span", { class: "mk mk-vac" }, "-"))
+      : el("td", { title: `出席${r.presentMin}分 / 離席${r.awayMin}分` },
+          el("span", { class: "mk hm" }, fmtHM(r.inMin)),
+          el("span", { class: "dt", title: r.forgot ? "帰宅/不在の押し忘れの可能性(翌朝4時の自動リセットまで在室扱い)" : null },
+            `${r.first ?? ""}〜${r.stillIn ? "在室中" : r.last ?? ""}${r.forgot ? "?" : ""}`)));
+    return el("tr", {}, el("td", {}, `${m.grade} ${m.name}`), ...dayCells,
+      el("td", {}, el("strong", {}, fmtHM(s.total))),
+      el("td", {}, `${s.attended}日`),
+      el("td", {}, s.avg === null ? "-" : fmtHM(s.avg)));
+  });
+  $("tbl").replaceChildren(el("thead", {}, head), el("tbody", {}, ...rows));
+}
+
 function downloadCsv() {
   if (!last) return;
   const q = v => `"${String(v).replace(/"/g, '""')}"`;
-  const lines = [["学年", "名前", "日付", "判定", "在室(分)", "うち離席(分)", "コアタイム(分)", "来室", "遅刻", "退室", "早退", "休暇登録"]];
-  for (const m of last.students) for (const r of last.report[m.id]) {
-    lines.push([m.grade, m.name, r.date, r.mark, r.inMin, r.awayMin, r.fullMin, r.arrival ?? "", r.late ? "遅刻" : "",
-                r.leftAt ?? "", r.early ? "早退" : "", r.vacation ? "休暇" : ""]);
+  let lines, name;
+  if (last.tab === "room") {
+    name = "room";
+    lines = [["学年", "名前", "日付", "在室(分)", "うち出席(分)", "うち離席(分)", "最初の来室", "最後の退室", "備考"]];
+    for (const m of last.students) for (const r of last.report[m.id]) {
+      lines.push([m.grade, m.name, r.date, r.inMin, r.presentMin, r.awayMin, r.first ?? "", r.stillIn ? "在室中" : r.last ?? "",
+                  r.forgot ? "押し忘れの可能性" : ""]);
+    }
+  } else {
+    name = "core";
+    lines = [["学年", "名前", "日付", "判定", "在室(分)", "うち離席(分)", "コアタイム(分)", "来室", "遅刻", "退室", "早退", "休暇登録"]];
+    for (const m of last.students) for (const r of last.report[m.id]) {
+      lines.push([m.grade, m.name, r.date, r.mark, r.inMin, r.awayMin, r.fullMin, r.arrival ?? "", r.late ? "遅刻" : "",
+                  r.leftAt ?? "", r.early ? "早退" : "", r.vacation ? "休暇" : ""]);
+    }
   }
   const blob = new Blob(["﻿" + lines.map(l => l.map(q).join(",")).join("\r\n")], { type: "text/csv" });
-  const a = el("a", { href: URL.createObjectURL(blob), download: `core_${last.d0}_${last.d1}.csv` });
+  const a = el("a", { href: URL.createObjectURL(blob), download: `${name}_${last.d0}_${last.d1}.csv` });
   document.body.append(a); a.click(); a.remove();
 }
 
@@ -126,9 +182,13 @@ $("next").addEventListener("click", () => shift(1));
 $("today").addEventListener("click", () => { base = ymdOf(new Date()); load(); });
 $("mode").addEventListener("change", load);
 $("csv").addEventListener("click", downloadCsv);
+document.querySelectorAll(".tabs [role=tab]").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 boot(() => Admin.gate($("lock-area"), () => {
   $("lock-area").hidden = true;
   $("stats-body").hidden = false;
+  document.querySelectorAll(".tabs [role=tab]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
+  $("note-core").hidden = tab !== "core";
+  $("note-room").hidden = tab !== "room";
   load().catch(e => { console.error(e); toast("集計の読み込みに失敗しました"); });
 }, true));
 </script>

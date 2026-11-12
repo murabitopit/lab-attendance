@@ -183,3 +183,9 @@ body.locked .wrap { visibility: hidden; }
 .app-lock-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px 20px; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
 .app-lock-card h1 { font-size: 20px; margin: 0; }
 .app-lock-card p { margin: 0; }
+
+/* log のタブ */
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.tabs [role=tab] { padding: 8px 18px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); font-weight: 600; }
+.tabs [role=tab][aria-selected="true"] { background: var(--accent); color: var(--accent-text); }
+td .mk.hm { font-size: 15px; font-variant-numeric: tabular-nums; }
